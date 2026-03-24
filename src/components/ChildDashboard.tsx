@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import GrowthChart from './GrowthChart'
 
 const SIZE_STAGES = [
   { id: 'nb', label: '50', months: 0, cm: '44–56', weight: '2–4kg', ageLabel: 'Vastasyntynyt' },
@@ -42,6 +43,66 @@ function getCurrentStage(heightCm: number) {
   }
   return SIZE_STAGES[0]
 }
+
+function predictSizeDate(
+    measurements: Measurement[],
+    targetCm: number,
+    dateOfBirth: string | null
+  ): string | null {
+    if (measurements.length === 0) return null
+  
+    // Lasketaan kasvuvauhti
+    let cmPerMonth: number
+  
+    if (measurements.length >= 2) {
+      // Käytetään kahta viimeisintä mittausta
+      const sorted = [...measurements].sort((a, b) =>
+        new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
+      )
+      const latest = sorted[0]
+      const previous = sorted[1]
+  
+      if (!latest.height_cm || !previous.height_cm) return null
+  
+      const daysDiff = (new Date(latest.measured_at).getTime() - new Date(previous.measured_at).getTime()) / (1000 * 60 * 60 * 24)
+      const monthsDiff = daysDiff / 30.44
+  
+      if (monthsDiff <= 0) return null
+  
+      const growthRate = (latest.height_cm - previous.height_cm) / monthsDiff
+  
+      // Järkevyystarkistus — kasvu 0.3–4 cm/kk
+      cmPerMonth = Math.min(Math.max(growthRate, 0.3), 4.0)
+    } else {
+      // Vain 1 mittaus — käytetään WHO-keskiarvoa iän mukaan
+      const m = measurements[0]
+      if (!m.height_cm) return null
+      const ageMonths = dateOfBirth
+        ? Math.round((new Date(m.measured_at).getTime() - new Date(dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 30.44))
+        : 6
+      // WHO:n mukainen kasvuvauhti iän perusteella
+      if (ageMonths < 3) cmPerMonth = 3.5
+      else if (ageMonths < 6) cmPerMonth = 2.5
+      else if (ageMonths < 12) cmPerMonth = 1.5
+      else if (ageMonths < 24) cmPerMonth = 1.2
+      else cmPerMonth = 0.6
+    }
+  
+    const latest = [...measurements].sort((a, b) =>
+      new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
+    )[0]
+  
+    if (!latest.height_cm) return null
+  
+    const cmNeeded = targetCm - latest.height_cm
+    if (cmNeeded <= 0) return null // Jo saavutettu
+  
+    const monthsNeeded = cmNeeded / cmPerMonth
+    const targetDate = new Date(latest.measured_at)
+    targetDate.setMonth(targetDate.getMonth() + Math.round(monthsNeeded))
+  
+    return targetDate.toLocaleDateString('fi-FI', { month: 'long', year: 'numeric' })
+  }
 
 function getNextStages(currentId: string) {
   const idx = SIZE_STAGES.findIndex(s => s.id === currentId)
@@ -221,7 +282,20 @@ export default function ChildDashboard({
                       <div style={{ textAlign: 'left' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           {isCurrent && <span style={{ fontSize: 9, background: '#2d5a27', color: 'white', padding: '2px 7px', borderRadius: 10, fontWeight: 800 }}>NYKYKOKO</span>}
-                          <span style={{ fontSize: 15, fontWeight: 900, color: '#1a2e18' }}>Koko {stage.label}</span>
+                          <div>
+  <span style={{ fontSize: 15, fontWeight: 900, color: '#1a2e18' }}>Koko {stage.label}</span>
+  {!isCurrent && measurements.length > 0 && (() => {
+    const targetCm = parseInt(stage.label)
+    if (isNaN(targetCm)) return null
+    const prediction = predictSizeDate(measurements, targetCm - 4, child.date_of_birth)
+    if (!prediction) return null
+    return (
+      <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 600, marginTop: 1 }}>
+        📅 Ennuste: {prediction}
+      </div>
+    )
+  })()}
+</div>
                         </div>
                         <div style={{ fontSize: 12, color: '#7a9a78' }}>{stage.cm} cm · {stage.ageLabel}</div>
                       </div>
@@ -365,6 +439,7 @@ export default function ChildDashboard({
         {/* ── MEASUREMENTS TAB ── */}
         {tab === 'measurements' && (
           <div>
+            <GrowthChart measurements={measurements} dateOfBirth={child.date_of_birth} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ fontSize: 18, fontWeight: 900, color: '#1a2e18', margin: 0 }}>📏 Mitat</h2>
               <button onClick={() => setAddingMeasurement(true)} style={{ padding: '8px 14px', borderRadius: 20, background: '#2d5a27', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
