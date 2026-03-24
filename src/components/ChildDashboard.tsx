@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import GrowthChart from './GrowthChart'
+import { useRouter } from 'next/navigation'
 
 const SIZE_STAGES = [
   { id: 'nb', label: '50', months: 0, cm: '44–56', weight: '2–4kg', ageLabel: 'Vastasyntynyt' },
@@ -36,77 +37,64 @@ const CATEGORIES = [
   { id: 'swimwear', label: 'Uima-asu', icon: '🏊', essential: false },
 ]
 
+
 function getCurrentStage(heightCm: number) {
   for (let i = SIZE_STAGES.length - 1; i >= 0; i--) {
-    const num = parseInt(SIZE_STAGES[i].cm)
+    const num = parseInt(SIZE_STAGES[i].label)
     if (!isNaN(num) && heightCm >= num - 4) return SIZE_STAGES[i]
   }
   return SIZE_STAGES[0]
 }
 
-function predictSizeDate(
-    measurements: Measurement[],
-    targetCm: number,
-    dateOfBirth: string | null
-  ): string | null {
-    if (measurements.length === 0) return null
-  
-    // Lasketaan kasvuvauhti
-    let cmPerMonth: number
-  
-    if (measurements.length >= 2) {
-      // Käytetään kahta viimeisintä mittausta
-      const sorted = [...measurements].sort((a, b) =>
-        new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
-      )
-      const latest = sorted[0]
-      const previous = sorted[1]
-  
-      if (!latest.height_cm || !previous.height_cm) return null
-  
-      const daysDiff = (new Date(latest.measured_at).getTime() - new Date(previous.measured_at).getTime()) / (1000 * 60 * 60 * 24)
-      const monthsDiff = daysDiff / 30.44
-  
-      if (monthsDiff <= 0) return null
-  
-      const growthRate = (latest.height_cm - previous.height_cm) / monthsDiff
-  
-      // Järkevyystarkistus — kasvu 0.3–4 cm/kk
-      cmPerMonth = Math.min(Math.max(growthRate, 0.3), 4.0)
-    } else {
-      // Vain 1 mittaus — käytetään WHO-keskiarvoa iän mukaan
-      const m = measurements[0]
-      if (!m.height_cm) return null
-      const ageMonths = dateOfBirth
-        ? Math.round((new Date(m.measured_at).getTime() - new Date(dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 30.44))
-        : 6
-      // WHO:n mukainen kasvuvauhti iän perusteella
-      if (ageMonths < 3) cmPerMonth = 3.5
-      else if (ageMonths < 6) cmPerMonth = 2.5
-      else if (ageMonths < 12) cmPerMonth = 1.5
-      else if (ageMonths < 24) cmPerMonth = 1.2
-      else cmPerMonth = 0.6
-    }
-  
-    const latest = [...measurements].sort((a, b) =>
-      new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
-    )[0]
-  
-    if (!latest.height_cm) return null
-  
-    const cmNeeded = targetCm - latest.height_cm
-    if (cmNeeded <= 0) return null // Jo saavutettu
-  
-    const monthsNeeded = cmNeeded / cmPerMonth
-    const targetDate = new Date(latest.measured_at)
-    targetDate.setMonth(targetDate.getMonth() + Math.round(monthsNeeded))
-  
-    return targetDate.toLocaleDateString('fi-FI', { month: 'long', year: 'numeric' })
-  }
-
 function getNextStages(currentId: string) {
   const idx = SIZE_STAGES.findIndex(s => s.id === currentId)
   return SIZE_STAGES.slice(idx + 1)
+}
+
+function predictSizeDate(
+  measurements: Measurement[],
+  targetCm: number,
+  dateOfBirth: string | null
+): string | null {
+  if (measurements.length === 0) return null
+
+  let cmPerMonth: number
+
+  if (measurements.length >= 2) {
+    const sorted = [...measurements].sort((a, b) =>
+      new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
+    )
+    const latest = sorted[0]
+    const previous = sorted[1]
+    if (!latest.height_cm || !previous.height_cm) return null
+    const daysDiff = (new Date(latest.measured_at).getTime() - new Date(previous.measured_at).getTime()) / (1000 * 60 * 60 * 24)
+    const monthsDiff = daysDiff / 30.44
+    if (monthsDiff <= 0) return null
+    const growthRate = (latest.height_cm - previous.height_cm) / monthsDiff
+    cmPerMonth = Math.min(Math.max(growthRate, 0.3), 4.0)
+  } else {
+    const m = measurements[0]
+    if (!m.height_cm) return null
+    const ageMonths = dateOfBirth
+      ? Math.round((new Date(m.measured_at).getTime() - new Date(dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 30.44))
+      : 6
+    if (ageMonths < 3) cmPerMonth = 3.5
+    else if (ageMonths < 6) cmPerMonth = 2.5
+    else if (ageMonths < 12) cmPerMonth = 1.5
+    else if (ageMonths < 24) cmPerMonth = 1.2
+    else cmPerMonth = 0.6
+  }
+
+  const latest = [...measurements].sort((a, b) =>
+    new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime()
+  )[0]
+  if (!latest.height_cm) return null
+  const cmNeeded = targetCm - latest.height_cm
+  if (cmNeeded <= 0) return null
+  const monthsNeeded = cmNeeded / cmPerMonth
+  const targetDate = new Date(latest.measured_at)
+  targetDate.setMonth(targetDate.getMonth() + Math.round(monthsNeeded))
+  return targetDate.toLocaleDateString('fi-FI', { month: 'long', year: 'numeric' })
 }
 
 type Measurement = {
@@ -126,6 +114,11 @@ type WardrobeItem = {
   brand: string | null
   color: string | null
   quantity: number
+  purchase_price: number | null
+  selling_price: number | null
+  status: string
+  image_url: string | null
+  archived_at: string | null
 }
 
 type Child = {
@@ -149,15 +142,21 @@ export default function ChildDashboard({
   const [wardrobe, setWardrobe] = useState(initialWardrobe)
   const [addingMeasurement, setAddingMeasurement] = useState(false)
   const [addingItem, setAddingItem] = useState<{ sizeLabel: string; categoryId: string } | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
   const [newM, setNewM] = useState({ height: '', weight: '', headCirc: '', footLength: '', date: new Date().toISOString().split('T')[0] })
-  const [newItem, setNewItem] = useState({ name: '', brand: '', color: '', qty: '1' })
+  const [newItem, setNewItem] = useState({ name: '', brand: '', color: '', qty: '1', purchasePrice: '', sellingPrice: '' })
   const [loading, setLoading] = useState(false)
   const [openStages, setOpenStages] = useState<string[]>([])
+  const [archivingItem, setArchivingItem] = useState<string | null>(null)
+  const [archiveData, setArchiveData] = useState({ sellingPrice: '', soldAt: new Date().toISOString().split('T')[0] })
   const supabase = createClient()
+  const router = useRouter()
 
   const latestM = measurements[0]
   const currentStage = latestM?.height_cm ? getCurrentStage(latestM.height_cm) : null
-  const futureStages = currentStage ? getNextStages(currentStage.id) : SIZE_STAGES
+
+  const activeWardrobe = wardrobe.filter(w => w.status === 'active')
+  const archivedWardrobe = wardrobe.filter(w => w.status === 'archived')
 
   const saveMeasurement = async () => {
     setLoading(true)
@@ -188,18 +187,36 @@ export default function ChildDashboard({
       brand: newItem.brand || null,
       color: newItem.color || null,
       quantity: parseInt(newItem.qty) || 1,
+      purchase_price: newItem.purchasePrice ? parseFloat(newItem.purchasePrice) : null,
+      selling_price: newItem.sellingPrice ? parseFloat(newItem.sellingPrice) : null,
+      status: 'active',
     }).select().single()
     if (!error && data) {
       setWardrobe(prev => [...prev, data])
       setAddingItem(null)
-      setNewItem({ name: '', brand: '', color: '', qty: '1' })
+      setNewItem({ name: '', brand: '', color: '', qty: '1', purchasePrice: '', sellingPrice: '' })
     }
     setLoading(false)
   }
 
-  const removeItem = async (id: string) => {
-    await supabase.from('wardrobe_items').delete().eq('id', id)
-    setWardrobe(prev => prev.filter(i => i.id !== id))
+  const archiveItem = async (id: string) => {
+    setLoading(true)
+    const { data, error } = await supabase.from('wardrobe_items')
+      .update({
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+        selling_price: archiveData.sellingPrice ? parseFloat(archiveData.sellingPrice) : null,
+        sold_at: archiveData.soldAt || null,
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (!error && data) {
+      setWardrobe(prev => prev.map(w => w.id === id ? data : w))
+      setArchivingItem(null)
+      setArchiveData({ sellingPrice: '', soldAt: new Date().toISOString().split('T')[0] })
+    }
+    setLoading(false)
   }
 
   const toggleStage = (id: string) => {
@@ -225,26 +242,32 @@ export default function ChildDashboard({
       <div style={{ background: 'linear-gradient(135deg, #1a2e18 0%, #2d5a27 100%)', padding: '20px 16px', position: 'sticky', top: 0, zIndex: 10 }}>
         <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <a href="/dashboard" style={{ color: 'white', fontSize: 22, textDecoration: 'none' }}>←</a>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 20, fontWeight: 900, color: 'white' }}>👶 {child.name}</div>
             <div style={{ fontSize: 12, color: '#a8d8a4' }}>
               {currentStage ? `Koko ${currentStage.label} · ${currentStage.ageLabel}` : 'Lisää mitat aloittaaksesi'}
             </div>
           </div>
+          <a href={`/dashboard/${child.id}/shopping`} style={{
+            background: '#ffffff20', borderRadius: 20, padding: '6px 14px',
+            color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+          }}>
+            🛍️ Ostokset
+          </a>
         </div>
       </div>
 
       {/* Content */}
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px 12px 80px' }}>
 
-        {/* ── TIMELINE TAB ── */}
+        {/* ── TIMELINE ── */}
         {tab === 'timeline' && (
           <div>
             {!currentStage && (
               <div style={{ background: '#fff9f0', border: '1.5px solid #fde9c2', borderRadius: 14, padding: 16, marginBottom: 16, textAlign: 'center' }}>
                 <div style={{ fontSize: 24, marginBottom: 6 }}>📏</div>
                 <div style={{ fontWeight: 700, color: '#7a4a0a', marginBottom: 4 }}>Lisää ensin mitat</div>
-                <div style={{ fontSize: 13, color: '#999', marginBottom: 12 }}>Mitat-välilehdeltä voit lisätä lapsen pituuden ja painon</div>
+                <div style={{ fontSize: 13, color: '#999', marginBottom: 12 }}>Mitat-välilehdeltä voit lisätä lapsen pituuden</div>
                 <button onClick={() => setTab('measurements')} style={{ padding: '8px 20px', borderRadius: 20, background: '#2d5a27', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer' }}>
                   Lisää mitat →
                 </button>
@@ -262,11 +285,12 @@ export default function ChildDashboard({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {(currentStage ? [currentStage, ...getNextStages(currentStage.id)] : SIZE_STAGES).map(stage => {
-                const owned = wardrobe.filter(w => w.size_label === stage.label)
+                const owned = activeWardrobe.filter(w => w.size_label === stage.label)
                 const ownedCatIds = owned.map(w => w.category_id)
                 const missing = CATEGORIES.filter(c => c.essential && !ownedCatIds.includes(c.id))
                 const isOpen = openStages.includes(stage.id)
                 const isCurrent = currentStage?.id === stage.id
+                const targetCm = parseInt(stage.label)
 
                 return (
                   <div key={stage.id} style={{
@@ -280,24 +304,16 @@ export default function ChildDashboard({
                       alignItems: 'center', fontFamily: 'inherit',
                     }}>
                       <div style={{ textAlign: 'left' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                           {isCurrent && <span style={{ fontSize: 9, background: '#2d5a27', color: 'white', padding: '2px 7px', borderRadius: 10, fontWeight: 800 }}>NYKYKOKO</span>}
-                          <div>
-  <span style={{ fontSize: 15, fontWeight: 900, color: '#1a2e18' }}>Koko {stage.label}</span>
-  {!isCurrent && measurements.length > 0 && (() => {
-    const targetCm = parseInt(stage.label)
-    if (isNaN(targetCm)) return null
-    const prediction = predictSizeDate(measurements, targetCm - 4, child.date_of_birth)
-    if (!prediction) return null
-    return (
-      <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 600, marginTop: 1 }}>
-        📅 Ennuste: {prediction}
-      </div>
-    )
-  })()}
-</div>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: '#1a2e18' }}>Koko {stage.label}</span>
                         </div>
                         <div style={{ fontSize: 12, color: '#7a9a78' }}>{stage.cm} cm · {stage.ageLabel}</div>
+                        {!isCurrent && measurements.length > 0 && (() => {
+                          const prediction = predictSizeDate(measurements, targetCm - 4, child.date_of_birth)
+                          if (!prediction) return null
+                          return <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 600, marginTop: 2 }}>📅 Ennuste: {prediction}</div>
+                        })()}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {missing.length > 0 && <span style={{ fontSize: 11, background: '#fde9c2', color: '#7a4a0a', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>Puuttuu {missing.length}</span>}
@@ -347,7 +363,7 @@ export default function ChildDashboard({
           </div>
         )}
 
-        {/* ── WARDROBE TAB ── */}
+        {/* ── WARDROBE ── */}
         {tab === 'wardrobe' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -358,6 +374,7 @@ export default function ChildDashboard({
               }}>+ Lisää vaate</button>
             </div>
 
+            {/* Lisää vaate -lomake */}
             {addingItem && (
               <div style={{ background: 'white', borderRadius: 16, padding: 20, marginBottom: 16, border: '2px solid #2d5a27' }}>
                 <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#1a2e18' }}>Lisää vaate kaappiin</h3>
@@ -394,6 +411,16 @@ export default function ChildDashboard({
                       <input type="number" min="1" style={inputStyle} value={newItem.qty} onChange={e => setNewItem(p => ({ ...p, qty: e.target.value }))} />
                     </div>
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={labelStyle}>OSTOHINTA (€)</label>
+                      <input type="number" step="0.01" style={inputStyle} value={newItem.purchasePrice} onChange={e => setNewItem(p => ({ ...p, purchasePrice: e.target.value }))} placeholder="29.90" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>MYYNTIHINTA (€)</label>
+                      <input type="number" step="0.01" style={inputStyle} value={newItem.sellingPrice} onChange={e => setNewItem(p => ({ ...p, sellingPrice: e.target.value }))} placeholder="15.00" />
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={saveWardrobeItem} disabled={loading} style={{ flex: 1, padding: '11px', borderRadius: 10, background: '#2d5a27', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
                       {loading ? 'Tallennetaan...' : 'Tallenna'}
@@ -406,40 +433,134 @@ export default function ChildDashboard({
               </div>
             )}
 
-            {wardrobe.length === 0 && !addingItem ? (
+            {/* Arkistointilomake */}
+            {archivingItem && (
+              <div style={{ background: '#fff9f0', borderRadius: 16, padding: 20, marginBottom: 16, border: '2px solid #fde9c2' }}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#7a4a0a' }}>Arkistoi vaate</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={labelStyle}>MYYNTIHINTA (€)</label>
+                      <input type="number" step="0.01" style={inputStyle} value={archiveData.sellingPrice} onChange={e => setArchiveData(p => ({ ...p, sellingPrice: e.target.value }))} placeholder="15.00" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>MYYNTIPÄIVÄ</label>
+                      <input type="date" style={inputStyle} value={archiveData.soldAt} onChange={e => setArchiveData(p => ({ ...p, soldAt: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => archiveItem(archivingItem)} disabled={loading} style={{ flex: 1, padding: '11px', borderRadius: 10, background: '#b85c00', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
+                      {loading ? 'Arkistoidaan...' : 'Arkistoi'}
+                    </button>
+                    <button onClick={() => setArchivingItem(null)} style={{ padding: '11px 16px', borderRadius: 10, background: 'white', color: '#888', border: '1.5px solid #ddd', cursor: 'pointer' }}>
+                      Peruuta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Aktiiviset vaatteet */}
+            {activeWardrobe.length === 0 && !addingItem ? (
               <div style={{ textAlign: 'center', padding: '48px 0', color: '#bbb' }}>
                 <div style={{ fontSize: 48, marginBottom: 8 }}>👚</div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Kaappi on tyhjä</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Lisää vaatteita yllä olevalla napilla</div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {wardrobe.map(item => {
+                {activeWardrobe.map(item => {
                   const cat = CATEGORIES.find(c => c.id === item.category_id)
                   return (
-                    <div key={item.id} style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 24 }}>{cat?.icon}</span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#1a2e18' }}>{item.name}</div>
-                          <div style={{ fontSize: 12, color: '#7a9a78' }}>
-                            Koko {item.size_label}{item.brand ? ` · ${item.brand}` : ''}{item.color ? ` · ${item.color}` : ''}{item.quantity > 1 ? ` · ×${item.quantity}` : ''}
+                    <div key={item.id} style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 14px', cursor: 'pointer' }}
+  onClick={() => router.push(`/dashboard/${child.id}/wardrobe/${item.id}`)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 24 }}>{cat?.icon}</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#1a2e18' }}>{item.name}</div>
+                            <div style={{ fontSize: 12, color: '#7a9a78' }}>
+                              Koko {item.size_label}{item.brand ? ` · ${item.brand}` : ''}{item.color ? ` · ${item.color}` : ''}{item.quantity > 1 ? ` · ×${item.quantity}` : ''}
+                            </div>
+                            {(item.purchase_price || item.selling_price) && (
+                              <div style={{ fontSize: 11, color: '#5a7a58', marginTop: 2 }}>
+                                {item.purchase_price ? `Ostettu: ${item.purchase_price}€` : ''}
+                                {item.purchase_price && item.selling_price ? ' · ' : ''}
+                                {item.selling_price ? `Myyntihinta: ${item.selling_price}€` : ''}
+                              </div>
+                            )}
                           </div>
                         </div>
+                        <button onClick={() => setArchivingItem(item.id)} style={{ background: 'none', border: 'none', color: '#e07070', cursor: 'pointer', fontSize: 13, padding: '4px 8px', borderRadius: 8, fontWeight: 700 }}>
+                          Arkistoi
+                        </button>
                       </div>
-                      <button onClick={() => removeItem(item.id)} style={{ background: 'none', border: 'none', color: '#e07070', cursor: 'pointer', fontSize: 20, padding: '0 4px' }}>×</button>
                     </div>
                   )
                 })}
               </div>
             )}
+
+            {/* Arkistoitu vaatehistoria */}
+            {archivedWardrobe.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <button onClick={() => setShowArchived(s => !s)} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', gap: 6, color: '#7a9a78', fontWeight: 700, fontSize: 13, padding: 0,
+                }}>
+                  <span style={{ transform: showArchived ? 'rotate(90deg)' : 'none', transition: '0.2s' }}>›</span>
+                  Vaatehistoria ({archivedWardrobe.length} vaatetta)
+                </button>
+
+                {showArchived && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                    {archivedWardrobe.map(item => {
+                      const cat = CATEGORIES.find(c => c.id === item.category_id)
+                      const profit = item.purchase_price && item.selling_price
+                        ? (item.selling_price - item.purchase_price).toFixed(2)
+                        : null
+                      return (
+                        <div key={item.id} style={{ background: '#f8f8f8', border: '1.5px solid #e0e0e0', borderRadius: 12, padding: '12px 14px', opacity: 0.8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ fontSize: 20 }}>{cat?.icon}</span>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: '#555' }}>{item.name} · Koko {item.size_label}</div>
+                              <div style={{ fontSize: 11, color: '#999' }}>
+                                {item.purchase_price ? `Ostettu: ${item.purchase_price}€` : ''}
+                                {item.selling_price ? ` · Myyty: ${item.selling_price}€` : ''}
+                                {profit !== null && (
+                                  <span style={{ color: parseFloat(profit) >= 0 ? '#2d5a27' : '#e07070', fontWeight: 700 }}>
+                                    {' '}({parseFloat(profit) >= 0 ? '+' : ''}{profit}€)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {/* Yhteenveto */}
+                    {archivedWardrobe.some(w => w.purchase_price || w.selling_price) && (
+                      <div style={{ background: '#f0f9ee', border: '1.5px solid #c8e6c4', borderRadius: 12, padding: '12px 16px', marginTop: 8 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 6 }}>💰 Vaatebudjetti yhteensä</div>
+                        <div style={{ fontSize: 12, color: '#5a7a58' }}>
+                          Ostettu yhteensä: <strong>{archivedWardrobe.filter(w => w.purchase_price).reduce((s, w) => s + (w.purchase_price || 0), 0).toFixed(2)}€</strong>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#5a7a58' }}>
+                          Myyty yhteensä: <strong>{archivedWardrobe.filter(w => w.selling_price).reduce((s, w) => s + (w.selling_price || 0), 0).toFixed(2)}€</strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── MEASUREMENTS TAB ── */}
+        {/* ── MEASUREMENTS ── */}
         {tab === 'measurements' && (
           <div>
-            <GrowthChart measurements={measurements} dateOfBirth={child.date_of_birth} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h2 style={{ fontSize: 18, fontWeight: 900, color: '#1a2e18', margin: 0 }}>📏 Mitat</h2>
               <button onClick={() => setAddingMeasurement(true)} style={{ padding: '8px 14px', borderRadius: 20, background: '#2d5a27', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
@@ -485,31 +606,26 @@ export default function ChildDashboard({
               </div>
             )}
 
-            {measurements.length === 0 && !addingMeasurement ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: '#bbb' }}>
-                <div style={{ fontSize: 48, marginBottom: 8 }}>📏</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Ei mittauksia vielä</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {measurements.map((m, i) => (
-                  <div key={m.id} style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ fontWeight: 800, color: '#1a2e18', fontSize: 14 }}>
-                        {new Date(m.measured_at).toLocaleDateString('fi-FI')}
-                      </div>
-                      {i === 0 && <span style={{ fontSize: 10, background: '#d4e6d1', color: '#2d5a27', padding: '2px 8px', borderRadius: 10, fontWeight: 800 }}>VIIMEISIN</span>}
+            <GrowthChart measurements={measurements} dateOfBirth={child.date_of_birth} />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+              {measurements.map((m, i) => (
+                <div key={m.id} style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ fontWeight: 800, color: '#1a2e18', fontSize: 14 }}>
+                      {new Date(m.measured_at).toLocaleDateString('fi-FI')}
                     </div>
-                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      {m.height_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>📏 {m.height_cm} cm</span>}
-                      {m.weight_kg && <span style={{ fontSize: 13, color: '#5a7a58' }}>⚖️ {m.weight_kg} kg</span>}
-                      {m.head_circ_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>🧢 {m.head_circ_cm} cm</span>}
-                      {m.foot_length_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>👟 {m.foot_length_cm} cm</span>}
-                    </div>
+                    {i === 0 && <span style={{ fontSize: 10, background: '#d4e6d1', color: '#2d5a27', padding: '2px 8px', borderRadius: 10, fontWeight: 800 }}>VIIMEISIN</span>}
                   </div>
-                ))}
-              </div>
-            )}
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    {m.height_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>📏 {m.height_cm} cm</span>}
+                    {m.weight_kg && <span style={{ fontSize: 13, color: '#5a7a58' }}>⚖️ {m.weight_kg} kg</span>}
+                    {m.head_circ_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>🧢 {m.head_circ_cm} cm</span>}
+                    {m.foot_length_cm && <span style={{ fontSize: 13, color: '#5a7a58' }}>👟 {m.foot_length_cm} cm</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
