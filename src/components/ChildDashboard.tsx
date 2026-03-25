@@ -234,8 +234,8 @@ export default function ChildDashboard({
     { id: 'timeline', label: 'Aikajana', icon: '📅' },
     { id: 'wardrobe', label: 'Kaappi', icon: '👗' },
     { id: 'measurements', label: 'Mitat', icon: '📏' },
+    { id: 'shopping', label: 'Ostokset', icon: '🛍️' },
   ]
-
   return (
     <div style={{ minHeight: '100vh', background: '#f4faf3', fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
@@ -632,20 +632,31 @@ export default function ChildDashboard({
 
       {/* Bottom nav */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', borderTop: '1px solid #e8f0e7', display: 'flex', justifyContent: 'center', boxShadow: '0 -4px 20px #0001' }}>
-        <div style={{ display: 'flex', width: '100%', maxWidth: 480 }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id as typeof tab)} style={{
-              flex: 1, padding: '12px 4px 10px', border: 'none', background: 'none',
-              cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              borderTop: tab === t.id ? '2.5px solid #2d5a27' : '2.5px solid transparent',
-              fontFamily: 'inherit',
-            }}>
-              <span style={{ fontSize: 20 }}>{t.icon}</span>
-              <span style={{ fontSize: 10, fontWeight: tab === t.id ? 800 : 600, color: tab === t.id ? '#2d5a27' : '#9aaa98' }}>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+  <div style={{ display: 'flex', width: '100%', maxWidth: 480 }}>
+    {TABS.map(t => (
+      t.id === 'shopping' ? (
+        <a key={t.id} href={`/dashboard/${child.id}/shopping`} style={{
+          flex: 1, padding: '12px 4px 10px', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', gap: 3, textDecoration: 'none',
+          borderTop: '2.5px solid transparent',
+        }}>
+          <span style={{ fontSize: 20 }}>{t.icon}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#9aaa98' }}>{t.label}</span>
+        </a>
+      ) : (
+        <button key={t.id} onClick={() => setTab(t.id as typeof tab)} style={{
+          flex: 1, padding: '12px 4px 10px', border: 'none', background: 'none',
+          cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+          borderTop: tab === t.id ? '2.5px solid #2d5a27' : '2.5px solid transparent',
+          fontFamily: 'inherit',
+        }}>
+          <span style={{ fontSize: 20 }}>{t.icon}</span>
+          <span style={{ fontSize: 10, fontWeight: tab === t.id ? 800 : 600, color: tab === t.id ? '#2d5a27' : '#9aaa98' }}>{t.label}</span>
+        </button>
+      )
+    ))}
+  </div>
+</div>
     </div>
   )
 }
