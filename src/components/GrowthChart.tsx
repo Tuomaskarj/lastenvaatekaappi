@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 type Measurement = {
   id: string
@@ -129,12 +129,18 @@ export default function GrowthChart({ measurements, dateOfBirth }: { measurement
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#999' }} />
               <YAxis tick={{ fontSize: 10, fill: '#999' }} />
               <Tooltip
-                formatter={(value: number, name: string) => {
-                    if (name === 'lapsi') return [`${value} ${unit}`, 'Lapsi']
-                  if (name === 'p50') return [`${value} ${unit}`, 'Keskiarvo (WHO)']
-                  if (name === 'p10') return [`${value} ${unit}`, 'P10 (WHO)']
-                  if (name === 'p90') return [`${value} ${unit}`, 'P90 (WHO)']
-                  return [value, name]
+                formatter={(value, name) => {
+                  // `value` can be `undefined` (e.g. when `lapsi` is `null` for a given WHO month).
+                  if (value === undefined || value === null) return ['—', name]
+
+                  const num = typeof value === 'number' ? value : Number(value)
+
+                  if (name === 'lapsi') return [`${num} ${unit}`, 'Lapsi']
+                  if (name === 'p50') return [`${num} ${unit}`, 'Keskiarvo (WHO)']
+                  if (name === 'p10') return [`${num} ${unit}`, 'P10 (WHO)']
+                  if (name === 'p90') return [`${num} ${unit}`, 'P90 (WHO)']
+
+                  return [num, name]
                 }}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />

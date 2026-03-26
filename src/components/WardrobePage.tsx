@@ -329,7 +329,7 @@ export default function WardrobePage({ wardrobe, allChildren, initialItems, meas
               return (
                 <div
                   key={item.id}
-                  onClick={() => router.push(`/dashboard/${wardrobeChildren[0]?.id}/wardrobe/${item.id}`)}
+                  onClick={() => router.push(`/wardrobe-item/${item.id}?childId=${wardrobeChildren[0]?.id}`)}
                   style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 14px', cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -29,7 +29,9 @@ const CATEGORIES = [
 
 type WardrobeItem = {
   id: string
-  child_id: string
+  child_id: string | null
+  wardrobe_id: string | null
+  current_wearer_id: string | null
   size_label: string
   category_id: string
   name: string | null
@@ -53,7 +55,17 @@ type Event = {
 
 type Child = { id: string; name: string }
 
-export default function WardrobeItemPage({ child, item: initialItem }: { child: Child; item: WardrobeItem }) {
+export default function WardrobeItemPage({
+  child,
+  item: initialItem,
+  wardrobes = [],
+  allChildren = [],
+}: {
+  child: Child
+  item: WardrobeItem
+  wardrobes?: { id: string; name: string }[]
+  allChildren?: { id: string; name: string }[]
+}) {
   const [item, setItem] = useState(initialItem)
   const [form, setForm] = useState({
     name: initialItem.name || '',
@@ -65,6 +77,8 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
     soldAt: initialItem.sold_at || '',
     sizeLabel: initialItem.size_label,
     categoryId: initialItem.category_id,
+    wardrobeId: initialItem.wardrobe_id || '',
+    currentWearerId: initialItem.current_wearer_id || '',
   })
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(false)
@@ -75,9 +89,7 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
   const supabase = createClient()
   const cat = CATEGORIES.find(c => c.id === item.category_id)
 
-  useEffect(() => {
-    loadEvents()
-  }, [])
+  useEffect(() => { loadEvents() }, [])
 
   const loadEvents = async () => {
     const { data } = await supabase
@@ -99,7 +111,6 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
 
   const save = async () => {
     setLoading(true)
-  
     const updates: Record<string, unknown> = {
       name: form.name || null,
       brand: form.brand || null,
@@ -110,62 +121,44 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
       sold_at: form.soldAt || null,
       purchase_price: form.purchasePrice !== '' ? parseFloat(form.purchasePrice) : null,
       selling_price: form.sellingPrice !== '' ? parseFloat(form.sellingPrice) : null,
+      wardrobe_id: form.wardrobeId || null,
+      current_wearer_id: form.currentWearerId || null,
     }
-  
+
     const { data, error } = await supabase
       .from('wardrobe_items')
       .update(updates)
       .eq('id', item.id)
       .select()
       .single()
-  
+
     if (!error && data) {
       setItem(data)
-  
-      // Rakennetaan tarkat muutoskuvaukset
       const changes: string[] = []
-  
-      if (form.name !== (item.name || '') && form.name)
-        changes.push(`Nimi muutettu: "${item.name || '—'}" → "${form.name}"`)
-  
-      if (form.brand !== (item.brand || '') && form.brand)
-        changes.push(`Merkki: ${item.brand || '—'} → ${form.brand}`)
-  
-      if (form.color !== (item.color || '') && form.color)
-        changes.push(`Väri: ${item.color || '—'} → ${form.color}`)
-  
-      if (form.sizeLabel !== item.size_label)
-        changes.push(`Koko muutettu: ${item.size_label} → ${form.sizeLabel}`)
-  
+      if (form.name !== (item.name || '') && form.name) changes.push(`Nimi: "${item.name || '—'}" → "${form.name}"`)
       if (form.purchasePrice !== '' && parseFloat(form.purchasePrice) !== item.purchase_price) {
-        const catLabel = CATEGORIES.find(c => c.id === item.category_id)?.label || 'Vaate'
         const dateStr = new Date().toLocaleDateString('fi-FI')
-        changes.push(`${catLabel} ostettu ${dateStr}, ostohinta ${parseFloat(form.purchasePrice).toFixed(2)}€`)
+        changes.push(`${cat?.label} ostettu ${dateStr}, ostohinta ${parseFloat(form.purchasePrice).toFixed(2)}€`)
       }
-  
       if (form.sellingPrice !== '' && parseFloat(form.sellingPrice) !== item.selling_price) {
-        const dateStr = form.soldAt
-          ? new Date(form.soldAt).toLocaleDateString('fi-FI')
-          : new Date().toLocaleDateString('fi-FI')
-        const catLabel = CATEGORIES.find(c => c.id === item.category_id)?.label || 'Vaate'
-        changes.push(`${catLabel} myyty ${dateStr}, myyntihinta ${parseFloat(form.sellingPrice).toFixed(2)}€`)
+        const dateStr = form.soldAt ? new Date(form.soldAt).toLocaleDateString('fi-FI') : new Date().toLocaleDateString('fi-FI')
+        changes.push(`${cat?.label} myyty ${dateStr}, myyntihinta ${parseFloat(form.sellingPrice).toFixed(2)}€`)
       }
-  
-      if (form.soldAt && form.soldAt !== item.sold_at && form.sellingPrice === '')
-        changes.push(`Myyntipäivä asetettu: ${new Date(form.soldAt).toLocaleDateString('fi-FI')}`)
-  
-      if (parseInt(form.qty) !== item.quantity)
-        changes.push(`Määrä: ${item.quantity} → ${form.qty} kpl`)
-  
-      const description = changes.length > 0 ? changes.join('\n') : 'Tiedot tarkistettu'
-      await addEvent('updated', description)
-  
+      if (form.wardrobeId !== (item.wardrobe_id || '')) {
+        const wardrobeName = wardrobes.find(w => w.id === form.wardrobeId)?.name || 'Ei kaappia'
+        changes.push(`Kaappi vaihdettu: ${wardrobeName}`)
+      }
+      if (form.currentWearerId !== (item.current_wearer_id || '')) {
+        const wearerName = allChildren.find(c => c.id === form.currentWearerId)?.name || 'Ei käyttäjää'
+        changes.push(`Käyttäjä vaihdettu: ${wearerName}`)
+      }
+      await addEvent('updated', changes.length > 0 ? changes.join('\n') : 'Tiedot päivitetty')
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     }
     setLoading(false)
   }
-  
+
   const archive = async () => {
     setLoading(true)
     const updates: Record<string, unknown> = {
@@ -174,17 +167,9 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
     }
     if (form.sellingPrice !== '') updates.selling_price = parseFloat(form.sellingPrice)
     if (form.soldAt) updates.sold_at = form.soldAt
-  
     await supabase.from('wardrobe_items').update(updates).eq('id', item.id)
-  
-    const dateStr = form.soldAt
-      ? new Date(form.soldAt).toLocaleDateString('fi-FI')
-      : new Date().toLocaleDateString('fi-FI')
-    const catLabel = CATEGORIES.find(c => c.id === item.category_id)?.label || 'Vaate'
-    const desc = form.sellingPrice
-      ? `${catLabel} arkistoitu ${dateStr}, myyntihinta ${parseFloat(form.sellingPrice).toFixed(2)}€`
-      : `${catLabel} arkistoitu ${dateStr}`
-  
+    const dateStr = form.soldAt ? new Date(form.soldAt).toLocaleDateString('fi-FI') : new Date().toLocaleDateString('fi-FI')
+    const desc = form.sellingPrice ? `${cat?.label} arkistoitu ${dateStr}, myyntihinta ${parseFloat(form.sellingPrice).toFixed(2)}€` : `${cat?.label} arkistoitu ${dateStr}`
     await addEvent('archived', desc)
     router.push(`/dashboard/${child.id}`)
     setLoading(false)
@@ -202,17 +187,11 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
     setUploading(true)
     const ext = file.name.split('.').pop()
     const path = `${child.id}/${item.id}.${ext}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('wardrobe-images')
-      .upload(path, file, { upsert: true })
-
+    const { error: uploadError } = await supabase.storage.from('wardrobe-images').upload(path, file, { upsert: true })
     if (!uploadError) {
       const { data: urlData } = supabase.storage.from('wardrobe-images').getPublicUrl(path)
-      const imageUrl = urlData.publicUrl
-
-      await supabase.from('wardrobe_items').update({ image_url: imageUrl }).eq('id', item.id)
-      setItem(prev => ({ ...prev, image_url: imageUrl }))
+      await supabase.from('wardrobe_items').update({ image_url: urlData.publicUrl }).eq('id', item.id)
+      setItem(prev => ({ ...prev, image_url: urlData.publicUrl }))
       await addEvent('updated', 'Kuva lisätty')
     }
     setUploading(false)
@@ -231,9 +210,7 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
     fontSize: 14, background: '#fafffe', width: '100%',
     boxSizing: 'border-box' as const, fontFamily: 'inherit', color: '#1a2e18',
   }
-  const labelStyle = {
-    fontSize: 12, fontWeight: 700, color: '#5a7a58', display: 'block', marginBottom: 3,
-  } as const
+  const labelStyle = { fontSize: 12, fontWeight: 700, color: '#5a7a58', display: 'block', marginBottom: 3 } as const
 
   return (
     <div style={{ minHeight: '100vh', background: '#f4faf3', fontFamily: 'system-ui, sans-serif' }}>
@@ -249,23 +226,19 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
             </div>
           </div>
           {item.status === 'archived' && (
-            <span style={{ fontSize: 11, background: '#ffffff30', color: 'white', padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>
-              ARKISTOITU
-            </span>
+            <span style={{ fontSize: 11, background: '#ffffff30', color: 'white', padding: '3px 10px', borderRadius: 10, fontWeight: 700 }}>ARKISTOITU</span>
           )}
         </div>
       </div>
 
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 12px 40px' }}>
 
-        {/* Tallennettu-viesti */}
         {saved && (
           <div style={{ background: '#f0f9ee', border: '1.5px solid #c8e6c4', borderRadius: 12, padding: '10px 16px', marginBottom: 16, fontSize: 13, fontWeight: 700, color: '#2d5a27', textAlign: 'center' }}>
             ✅ Tallennettu!
           </div>
         )}
 
-        {/* Hintatiedot kortti */}
         {profit !== null && (
           <div style={{ background: 'white', borderRadius: 14, padding: 16, marginBottom: 16, border: '1.5px solid #e8f0e7', display: 'flex', justifyContent: 'space-around' }}>
             <div style={{ textAlign: 'center' }}>
@@ -285,7 +258,6 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
           </div>
         )}
 
-        {/* Kaksipalstainen layout */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
 
           {/* Vasen — lomake */}
@@ -295,24 +267,20 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
             <div style={{ background: 'white', borderRadius: 16, padding: 20, border: '1.5px solid #e8f0e7' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 12 }}>🖼️ Kuva</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div
-                  onClick={() => fileRef.current?.click()}
-                  style={{
-                    width: 100, height: 100, borderRadius: 14,
-                    background: item.image_url ? 'transparent' : '#f0f9ee',
-                    border: '2px dashed #c8e6c4', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden', flexShrink: 0,
-                  }}
-                >
-                  {item.image_url ? (
-                    <img src={item.image_url} alt="Vaate" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ textAlign: 'center', color: '#7a9a78' }}>
-                      <div style={{ fontSize: 28 }}>{cat?.icon}</div>
-                      <div style={{ fontSize: 10, marginTop: 4 }}>Lisää kuva</div>
-                    </div>
-                  )}
+                <div onClick={() => fileRef.current?.click()} style={{
+                  width: 100, height: 100, borderRadius: 14,
+                  background: item.image_url ? 'transparent' : '#f0f9ee',
+                  border: '2px dashed #c8e6c4', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden', flexShrink: 0,
+                }}>
+                  {item.image_url
+                    ? <img src={item.image_url} alt="Vaate" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <div style={{ textAlign: 'center', color: '#7a9a78' }}>
+                        <div style={{ fontSize: 28 }}>{cat?.icon}</div>
+                        <div style={{ fontSize: 10, marginTop: 4 }}>Lisää kuva</div>
+                      </div>
+                  }
                 </div>
                 <div>
                   <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{
@@ -324,13 +292,8 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
                   </button>
                   <div style={{ fontSize: 11, color: '#aaa' }}>JPG, PNG · max 5MB</div>
                 </div>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files?.[0]) uploadImage(e.target.files[0]) }}
-                />
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files?.[0]) uploadImage(e.target.files[0]) }} />
               </div>
             </div>
 
@@ -373,6 +336,31 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
               </div>
             </div>
 
+            {/* Sijainti */}
+            <div style={{ background: 'white', borderRadius: 16, padding: 20, border: '1.5px solid #e8f0e7' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 12 }}>📦 Sijainti</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>KAAPPI</label>
+                  <select style={inputStyle} value={form.wardrobeId} onChange={e => setForm(p => ({ ...p, wardrobeId: e.target.value }))}>
+                    <option value="">Ei kaappia</option>
+                    {wardrobes.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>KÄYTTÄJÄ NYT</label>
+                  <select style={inputStyle} value={form.currentWearerId} onChange={e => setForm(p => ({ ...p, currentWearerId: e.target.value }))}>
+                    <option value="">Ei määritetty</option>
+                    {allChildren.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
             {/* Hintatiedot */}
             <div style={{ background: 'white', borderRadius: 16, padding: 20, border: '1.5px solid #e8f0e7' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 12 }}>💰 Hintatiedot</div>
@@ -380,23 +368,13 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <label style={labelStyle}>OSTOHINTA (€)</label>
-                    <input
-                      type="number" step="0.01"
-                      style={inputStyle}
-                      value={form.purchasePrice}
-                      onChange={e => setForm(p => ({ ...p, purchasePrice: e.target.value }))}
-                      placeholder="29.90"
-                    />
+                    <input type="number" step="0.01" style={inputStyle} value={form.purchasePrice}
+                      onChange={e => setForm(p => ({ ...p, purchasePrice: e.target.value }))} placeholder="29.90" />
                   </div>
                   <div>
                     <label style={labelStyle}>MYYNTIHINTA (€)</label>
-                    <input
-                      type="number" step="0.01"
-                      style={inputStyle}
-                      value={form.sellingPrice}
-                      onChange={e => setForm(p => ({ ...p, sellingPrice: e.target.value }))}
-                      placeholder="15.00"
-                    />
+                    <input type="number" step="0.01" style={inputStyle} value={form.sellingPrice}
+                      onChange={e => setForm(p => ({ ...p, sellingPrice: e.target.value }))} placeholder="15.00" />
                   </div>
                 </div>
                 <div>
@@ -423,17 +401,13 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
                   width: '100%', padding: '11px', borderRadius: 12,
                   background: 'white', color: '#b85c00', border: '1.5px solid #fde9c2',
                   fontWeight: 700, cursor: 'pointer', fontSize: 14,
-                }}>
-                  📦 Arkistoi vaate
-                </button>
+                }}>📦 Arkistoi vaate</button>
               ) : (
                 <button onClick={restore} disabled={loading} style={{
                   width: '100%', padding: '11px', borderRadius: 12,
                   background: 'white', color: '#2d5a27', border: '1.5px solid #c8e6c4',
                   fontWeight: 700, cursor: 'pointer', fontSize: 14,
-                }}>
-                  ↩️ Palauta kaappiin
-                </button>
+                }}>↩️ Palauta kaappiin</button>
               )}
             </div>
           </div>
@@ -449,7 +423,6 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {events.map((event, i) => (
                   <div key={event.id} style={{ display: 'flex', gap: 10, paddingBottom: i < events.length - 1 ? 16 : 0 }}>
-                    {/* Aikajanaviiva */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                       <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0f9ee', border: '2px solid #c8e6c4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>
                         {eventIcon[event.event_type] || '•'}
@@ -467,11 +440,11 @@ export default function WardrobeItemPage({ child, item: initialItem }: { child: 
                       </div>
                       {event.description && (
                         <div style={{ fontSize: 11, color: '#7a9a78', marginTop: 2 }}>
-                            {event.description.split('\n').map((line, i) => (
+                          {event.description.split('\n').map((line, i) => (
                             <div key={i}>{line}</div>
-                            ))}
+                          ))}
                         </div>
-                        )}
+                      )}
                       <div style={{ fontSize: 10, color: '#bbb', marginTop: 3 }}>
                         {new Date(event.created_at).toLocaleDateString('fi-FI', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>

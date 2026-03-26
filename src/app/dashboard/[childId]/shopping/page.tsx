@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import ShoppingPage from '@/components/ShoppingPage'
+import ShoppingPage from '../../../../components/ShoppingPage'
 
 export default async function Shopping({ params }: { params: Promise<{ childId: string }> }) {
   const { childId } = await params

@@ -129,14 +129,18 @@ type Child = {
 }
 
 export default function ChildDashboard({
-  child,
-  initialMeasurements,
-  initialWardrobe,
-}: {
-  child: Child
-  initialMeasurements: Measurement[]
-  initialWardrobe: WardrobeItem[]
-}) {
+    child,
+    initialMeasurements,
+    initialWardrobe,
+    wardrobes,
+    wardrobeIds,
+  }: {
+    child: Child
+    initialMeasurements: Measurement[]
+    initialWardrobe: WardrobeItem[]
+    wardrobes: { id: string; name: string }[]
+    wardrobeIds: string[]
+  }) {
   const [tab, setTab] = useState<'timeline' | 'wardrobe' | 'measurements'>('timeline')
   const [measurements, setMeasurements] = useState(initialMeasurements)
   const [wardrobe, setWardrobe] = useState(initialWardrobe)
@@ -179,8 +183,14 @@ export default function ChildDashboard({
   const saveWardrobeItem = async () => {
     if (!addingItem) return
     setLoading(true)
+  
+    // Käytetään ensimmäistä kaappia johon lapsi on linkitetty
+    const targetWardrobeId = wardrobeIds[0] || null
+  
     const { data, error } = await supabase.from('wardrobe_items').insert({
-      child_id: child.id,
+      wardrobe_id: targetWardrobeId,
+      child_id: targetWardrobeId ? null : child.id, // legacy jos ei kaappia
+      current_wearer_id: child.id,
       size_label: addingItem.sizeLabel,
       category_id: addingItem.categoryId,
       name: newItem.name || CATEGORIES.find(c => c.id === addingItem.categoryId)?.label,
@@ -191,6 +201,7 @@ export default function ChildDashboard({
       selling_price: newItem.sellingPrice ? parseFloat(newItem.sellingPrice) : null,
       status: 'active',
     }).select().single()
+  
     if (!error && data) {
       setWardrobe(prev => [...prev, data])
       setAddingItem(null)
@@ -343,14 +354,17 @@ export default function ChildDashboard({
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 800, color: '#2d5a27', marginBottom: 8 }}>✅ KAAPISSA</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                              {owned.map(item => {
-                                const cat = CATEGORIES.find(c => c.id === item.category_id)
-                                return (
-                                  <span key={item.id} style={{ background: '#d4e6d1', color: '#1a2e18', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-                                    {cat?.icon} {item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ''}
-                                  </span>
-                                )
-                              })}
+                            {owned.map(item => {
+  const cat = CATEGORIES.find(c => c.id === item.category_id)
+  return (
+    <button key={item.id} onClick={() => router.push(`/wardrobe-item/${item.id}?childId=${child.id}`)} style={{
+      background: '#d4e6d1', color: '#1a2e18', padding: '4px 10px', borderRadius: 20,
+      fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+    }}>
+      {cat?.icon} {item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ''} ›
+    </button>
+  )
+})}
                             </div>
                           </div>
                         )}
@@ -472,7 +486,7 @@ export default function ChildDashboard({
                   const cat = CATEGORIES.find(c => c.id === item.category_id)
                   return (
                     <div key={item.id} style={{ background: 'white', border: '1.5px solid #e8f0e7', borderRadius: 12, padding: '12px 14px', cursor: 'pointer' }}
-  onClick={() => router.push(`/dashboard/${child.id}/wardrobe/${item.id}`)}>
+                    onClick={() => router.push(`/wardrobe-item/${item.id}?childId=${child.id}`)}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 24 }}>{cat?.icon}</span>
@@ -632,31 +646,20 @@ export default function ChildDashboard({
 
       {/* Bottom nav */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', borderTop: '1px solid #e8f0e7', display: 'flex', justifyContent: 'center', boxShadow: '0 -4px 20px #0001' }}>
-  <div style={{ display: 'flex', width: '100%', maxWidth: 480 }}>
-    {TABS.map(t => (
-      t.id === 'shopping' ? (
-        <a key={t.id} href={`/dashboard/${child.id}/shopping`} style={{
-          flex: 1, padding: '12px 4px 10px', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: 3, textDecoration: 'none',
-          borderTop: '2.5px solid transparent',
-        }}>
-          <span style={{ fontSize: 20 }}>{t.icon}</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: '#9aaa98' }}>{t.label}</span>
-        </a>
-      ) : (
-        <button key={t.id} onClick={() => setTab(t.id as typeof tab)} style={{
-          flex: 1, padding: '12px 4px 10px', border: 'none', background: 'none',
-          cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-          borderTop: tab === t.id ? '2.5px solid #2d5a27' : '2.5px solid transparent',
-          fontFamily: 'inherit',
-        }}>
-          <span style={{ fontSize: 20 }}>{t.icon}</span>
-          <span style={{ fontSize: 10, fontWeight: tab === t.id ? 800 : 600, color: tab === t.id ? '#2d5a27' : '#9aaa98' }}>{t.label}</span>
-        </button>
-      )
-    ))}
-  </div>
-</div>
+        <div style={{ display: 'flex', width: '100%', maxWidth: 480 }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id as typeof tab)} style={{
+              flex: 1, padding: '12px 4px 10px', border: 'none', background: 'none',
+              cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+              borderTop: tab === t.id ? '2.5px solid #2d5a27' : '2.5px solid transparent',
+              fontFamily: 'inherit',
+            }}>
+              <span style={{ fontSize: 20 }}>{t.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: tab === t.id ? 800 : 600, color: tab === t.id ? '#2d5a27' : '#9aaa98' }}>{t.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

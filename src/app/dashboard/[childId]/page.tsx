@@ -23,16 +23,48 @@ export default async function ChildPage({ params }: { params: Promise<{ childId:
     .eq('child_id', childId)
     .order('measured_at', { ascending: false })
 
-  const { data: wardrobeItems } = await supabase
+  // Hae kaapit joihin lapsi on linkitetty
+  const { data: wardrobeLinks } = await supabase
+    .from('wardrobe_children')
+    .select('wardrobe_id')
+    .eq('child_id', childId)
+
+  const wardrobeIds = wardrobeLinks?.map(w => w.wardrobe_id) || []
+
+  // Hae vaatteet kaikista kaapit
+  let wardrobeItems: unknown[] = []
+  if (wardrobeIds.length > 0) {
+    const { data: items } = await supabase
+      .from('wardrobe_items')
+      .select('*')
+      .in('wardrobe_id', wardrobeIds)
+      .eq('status', 'active')
+    wardrobeItems = items || []
+  }
+
+  // Hae myös vanhat lapsikohtaiset vaatteet (migraatio)
+  const { data: legacyItems } = await supabase
     .from('wardrobe_items')
     .select('*')
     .eq('child_id', childId)
+    .is('wardrobe_id', null)
+    .eq('status', 'active')
+
+  const allItems = [...wardrobeItems, ...(legacyItems || [])]
+
+  // Hae kaapit
+  const { data: wardrobes } = await supabase
+    .from('wardrobes')
+    .select('*')
+    .in('id', wardrobeIds.length > 0 ? wardrobeIds : ['none'])
 
   return (
     <ChildDashboard
       child={child}
       initialMeasurements={measurements || []}
-      initialWardrobe={wardrobeItems || []}
+      initialWardrobe={allItems as never[]}
+      wardrobes={wardrobes || []}
+      wardrobeIds={wardrobeIds}
     />
   )
 }
