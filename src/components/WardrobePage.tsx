@@ -158,6 +158,7 @@ export default function WardrobePage({ wardrobe, allChildren, initialItems, meas
   }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: '#5a7a58', display: 'block', marginBottom: 3 } as const
 
+
   return (
     <div style={{ minHeight: '100vh', background: '#f4faf3', fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
@@ -244,6 +245,8 @@ export default function WardrobePage({ wardrobe, allChildren, initialItems, meas
                 </div>
               </div>
 
+              
+
               {/* AI-ehdotus kenelle sopii */}
               {(() => {
                 const suggested = getSuggestedWearers(newItem.sizeLabel, wardrobeChildren, measurements)
@@ -266,6 +269,53 @@ export default function WardrobePage({ wardrobe, allChildren, initialItems, meas
             </div>
           </div>
         )}
+
+        {/* Budjetti */}
+{activeItems.length > 0 && (
+  <div style={{ background: 'white', borderRadius: 14, padding: 16, marginBottom: 16, border: '1.5px solid #e8f0e7' }}>
+    <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 12 }}>💰 Vaatebudjetti</div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>OSTETTU</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#1a2e18' }}>
+          {[...activeItems, ...archivedItems]
+            .filter(w => w.purchase_price)
+            .reduce((s, w) => s + (w.purchase_price || 0), 0)
+            .toFixed(0)}€
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>MYYTY</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#2d5a27' }}>
+          {archivedItems
+            .filter(w => w.selling_price)
+            .reduce((s, w) => s + (w.selling_price || 0), 0)
+            .toFixed(0)}€
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>NETTO</div>
+        {(() => {
+          const spent = [...activeItems, ...archivedItems]
+            .filter(w => w.purchase_price)
+            .reduce((s, w) => s + (w.purchase_price || 0), 0)
+          const earned = archivedItems
+            .filter(w => w.selling_price)
+            .reduce((s, w) => s + (w.selling_price || 0), 0)
+          const net = spent - earned
+          return (
+            <div style={{ fontSize: 18, fontWeight: 900, color: net > 0 ? '#e07070' : '#2d5a27' }}>
+              {net.toFixed(0)}€
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+    <div style={{ marginTop: 10, fontSize: 11, color: '#aaa', textAlign: 'center' }}>
+      {activeItems.length} aktiivista · {archivedItems.length} arkistoitua vaatetta
+    </div>
+  </div>
+)}
 
         {/* Suodattimet */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>

@@ -517,6 +517,52 @@ export default function ChildDashboard({
               </div>
             )}
 
+            {/* Yhteenveto */}
+    {activeWardrobe.length > 0 && (  
+    <div style={{ background: 'white', borderRadius: 14, padding: 16, marginBottom: 16, border: '1.5px solid #e8f0e7' }}>
+    <div style={{ fontSize: 13, fontWeight: 800, color: '#1a2e18', marginBottom: 12 }}>💰 Vaatebudjetti</div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>OSTETTU</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#1a2e18' }}>
+          {[...activeWardrobe, ...archivedWardrobe]
+            .filter(w => w.purchase_price)
+            .reduce((s, w) => s + (w.purchase_price || 0), 0)
+            .toFixed(0)}€
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>MYYTY</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#2d5a27' }}>
+          {archivedWardrobe
+            .filter(w => w.selling_price)
+            .reduce((s, w) => s + (w.selling_price || 0), 0)
+            .toFixed(0)}€
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: '#7a9a78', fontWeight: 700, marginBottom: 2 }}>NETTO</div>
+        {(() => {
+          const spent = [...activeWardrobe, ...archivedWardrobe]
+            .filter(w => w.purchase_price)
+            .reduce((s, w) => s + (w.purchase_price || 0), 0)
+          const earned = archivedWardrobe
+            .filter(w => w.selling_price)
+            .reduce((s, w) => s + (w.selling_price || 0), 0)
+          const net = spent - earned
+          return (
+            <div style={{ fontSize: 18, fontWeight: 900, color: net > 0 ? '#e07070' : '#2d5a27' }}>
+              {net.toFixed(0)}€
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+    <div style={{ marginTop: 10, fontSize: 11, color: '#aaa', textAlign: 'center' }}>
+      {activeWardrobe.length} aktiivista · {archivedWardrobe.length} arkistoitua vaatetta
+    </div>
+  </div>
+)}
             {/* Arkistoitu vaatehistoria */}
             {archivedWardrobe.length > 0 && (
               <div style={{ marginTop: 24 }}>
