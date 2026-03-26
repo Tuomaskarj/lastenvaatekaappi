@@ -135,19 +135,51 @@ export default function WardrobeItemPage({
     if (!error && data) {
       setItem(data)
       const changes: string[] = []
-      if (form.name !== (item.name || '') && form.name) changes.push(`Nimi: "${item.name || '—'}" → "${form.name}"`)
-      if (form.purchasePrice !== '' && parseFloat(form.purchasePrice) !== item.purchase_price) {
-        const dateStr = new Date().toLocaleDateString('fi-FI')
-        changes.push(`${cat?.label} ostettu ${dateStr}, ostohinta ${parseFloat(form.purchasePrice).toFixed(2)}€`)
+
+      if (form.name !== (item.name || '') && form.name)
+        changes.push(`Nimi: "${item.name || '—'}" → "${form.name}"`)
+      
+      if (form.brand !== (item.brand || '') && form.brand)
+        changes.push(`Merkki: ${item.brand || '—'} → ${form.brand}`)
+      
+      if (form.color !== (item.color || '') && form.color)
+        changes.push(`Väri: ${item.color || '—'} → ${form.color}`)
+      
+      if (form.sizeLabel !== item.size_label)
+        changes.push(`Koko: ${item.size_label} → ${form.sizeLabel}`)
+      
+      if (form.categoryId !== item.category_id) {
+        const oldCat = CATEGORIES.find(c => c.id === item.category_id)?.label || item.category_id
+        const newCat = CATEGORIES.find(c => c.id === form.categoryId)?.label || form.categoryId
+        changes.push(`Kategoria: ${oldCat} → ${newCat}`)
       }
-      if (form.sellingPrice !== '' && parseFloat(form.sellingPrice) !== item.selling_price) {
+      
+      if (parseInt(form.qty) !== item.quantity)
+        changes.push(`Määrä: ${item.quantity} → ${form.qty} kpl`)
+      
+      if (form.purchasePrice !== '' && item.purchase_price === null)
+        changes.push(`${cat?.label} ostettu, ostohinta ${parseFloat(form.purchasePrice).toFixed(2)}€`)
+      else if (form.purchasePrice !== '' && Math.abs(parseFloat(form.purchasePrice) - (item.purchase_price ?? 0)) > 0.001)
+        changes.push(`Ostohinta muutettu: ${item.purchase_price}€ → ${parseFloat(form.purchasePrice).toFixed(2)}€`)
+      else if (form.purchasePrice === '' && item.purchase_price !== null)
+        changes.push(`Ostohinta poistettu`)
+      
+      if (form.sellingPrice !== '' && item.selling_price === null) {
         const dateStr = form.soldAt ? new Date(form.soldAt).toLocaleDateString('fi-FI') : new Date().toLocaleDateString('fi-FI')
         changes.push(`${cat?.label} myyty ${dateStr}, myyntihinta ${parseFloat(form.sellingPrice).toFixed(2)}€`)
-      }
+      } else if (form.sellingPrice !== '' && Math.abs(parseFloat(form.sellingPrice) - (item.selling_price ?? 0)) > 0.001)
+        changes.push(`Myyntihinta muutettu: ${item.selling_price}€ → ${parseFloat(form.sellingPrice).toFixed(2)}€`)
+      else if (form.sellingPrice === '' && item.selling_price !== null)
+        changes.push(`Myyntihinta poistettu`)
+      
+      if (form.soldAt !== (item.sold_at || '') && form.soldAt)
+        changes.push(`Myyntipäivä: ${new Date(form.soldAt).toLocaleDateString('fi-FI')}`)
+      
       if (form.wardrobeId !== (item.wardrobe_id || '')) {
         const wardrobeName = wardrobes.find(w => w.id === form.wardrobeId)?.name || 'Ei kaappia'
         changes.push(`Kaappi vaihdettu: ${wardrobeName}`)
       }
+      
       if (form.currentWearerId !== (item.current_wearer_id || '')) {
         const wearerName = allChildren.find(c => c.id === form.currentWearerId)?.name || 'Ei käyttäjää'
         changes.push(`Käyttäjä vaihdettu: ${wearerName}`)

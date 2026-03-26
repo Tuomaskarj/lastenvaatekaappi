@@ -296,7 +296,10 @@ export default function ChildDashboard({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {(currentStage ? [currentStage, ...getNextStages(currentStage.id)] : SIZE_STAGES).map(stage => {
-                const owned = activeWardrobe.filter(w => w.size_label === stage.label)
+                const owned = activeWardrobe.filter(w =>
+                  w.size_label === stage.label &&
+                  (w.current_wearer_id === child.id || w.current_wearer_id === null)
+                )
                 const ownedCatIds = owned.map(w => w.category_id)
                 const missing = CATEGORIES.filter(c => c.essential && !ownedCatIds.includes(c.id))
                 const isOpen = openStages.includes(stage.id)
